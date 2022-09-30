@@ -76,16 +76,22 @@ namespace PDFReader
             FileInfo file = new FileInfo(args[0]);
             var timer = System.Diagnostics.Stopwatch.StartNew();
             Console.Write("Loading.");
-            var settings = new CoordnateSettings();
+            //var settings = new CoordnateSettings();
 
-            using (StreamReader r = new StreamReader(args[1]))
+            // using (StreamReader r = new StreamReader(args[1]))
+            // {
+            //     string json = r.ReadToEnd();
+            //     settings = JsonConvert.DeserializeObject<CoordnateSettings>(json);
+            // }
+
+            var density = 500.0;
+            if (args.Count() > 1)
             {
-                string json = r.ReadToEnd();
-                settings = JsonConvert.DeserializeObject<CoordnateSettings>(json);
+                density = Convert.ToDouble(args[1]);
             }
 
             PdfToImageConverter pdf = new PdfToImageConverter(file);
-            pdf.ConvertFileToImages(file, "C:\\tmp\\", settings.Density, settings.CornerX, settings.CornerY + settings.LengthY, settings.LengthX, settings.LengthY);
+            pdf.ConvertFileToImages(file, "C:\\tmp\\", density);
             timer.Stop();
             Console.WriteLine($"Write complete in {timer.Elapsed}");
             return 0;
@@ -104,12 +110,12 @@ namespace PDFReader
             MagickNET.SetTempDirectory(tmpDir.ToString());
             tmpFile = tmpDir.ToString() + "\\tmp.png";
         }
-        public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, double cornerX, double cornerY, double wsLength, double wsHeight)
+        public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity)
         {
             var fileName = Path.GetFileNameWithoutExtension(file.Name);
 
             double currentDensity = initialDensity;
-            const int tileSize = 300;
+            const int tileSize = 256;
             var pageTresholdReached = new List<bool>();
             string output = file.Directory.ToString() + "\\" + fileName + "\\";
             Directory.CreateDirectory(output);
@@ -177,8 +183,9 @@ namespace PDFReader
                         heightTileSize = tileSize;
                         widthTileSize = (int)Math.Ceiling((double)magickImage.Width / (double)noIteration);
                     }
-                    var wsDx = wsLength / noIteration;
-                    var wsDy = wsHeight / noIteration;
+                    var aspect = magickImage.Width / magickImage.Height;
+                    var wsDx = aspect / noIteration;
+                    var wsDy = 1 / noIteration;
                     for (var i = 0; i < noIteration; ++i)
                     {
                         int x = i * widthTileSize;
@@ -212,8 +219,8 @@ namespace PDFReader
 
                                 using (var vertexBuffer = new VertexBufferBuilderPT(builder))
                                 {
-                                    var localCornerX = cornerX + (i * wsDx);
-                                    var localCornerY = cornerY - ((j + 1) * wsDy);
+                                    var localCornerX = i * wsDx;
+                                    var localCornerY = (j + 1) * wsDy;
                                     Vector3 a = new Vector3((float)localCornerX, (float)localCornerY, 0);
                                     Vector3 b = new Vector3((float)localCornerX + (float)wsDx, (float)localCornerY, 0);
                                     Vector3 c = new Vector3((float)localCornerX + (float)wsDx, (float)localCornerY + (float)wsDy, 0);
