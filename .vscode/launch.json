@@ -14,7 +14,7 @@
             "program": "${workspaceFolder}/bin/Debug/net6.0/PdfReader.exe",
             "args": [
                 "C:\\TestData\\PDF\\A-PL-V-200-0100 Plan-01.pdf",
-                "C:\\TestData\\PDF\\A-PL-V-200-0100 Plan-01.json"
+                "300"
             ],
             "cwd": "${workspaceFolder}",
             // For more information about the 'console' field, see https://aka.ms/VSCode-CS-LaunchJson-Console
