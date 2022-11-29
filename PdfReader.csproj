@@ -3,22 +3,22 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net6.0</TargetFramework>
-    <RootNamespace>NovoTech.IfcReader</RootNamespace>
+    <RootNamespace>NovoRender.PDFReader</RootNamespace>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platform>x64</Platform>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <NoWarn>NU1701</NoWarn>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
-    <!-- <PackageReference Include="Xbim.Tessellator" Version="5.1.323" /> -->
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="CommandLineArgumentsParser" Version="3.0.22" />
     <PackageReference Include="NovoRender.GLtf" Version="0.0.58" />
     <PackageReference Include="Magick.NET-Q16-x64" Version="12.1.0" />
   </ItemGroup>
 
   <Target Name="CopyNativeDLLs" AfterTargets="Publish">
-    <Copy SourceFiles=".\bin\release\net6.0\gltf_api.dll" DestinationFolder="$(PublishDir)" />
+    <Copy SourceFiles=".\bin\x64\release\net6.0\win-x64\gltf_api.dll" DestinationFolder="$(PublishDir)" />
   </Target>
 </Project>
