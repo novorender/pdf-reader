@@ -194,10 +194,10 @@ namespace NovoRender.PDFReader
                         {
                             int y = j * tileSize;
                             if (y >= magickImage.Height) break;
-                            using (var builder = new GLtf.Builder())
+                            var id = new string(Enumerable.Range(0, lods.Count - lodDepth).Select(k => (char)('0' + ((i & (1 << k)) != 0 ? 1 : 0) | ((j & (1 << k)) != 0 ? 2 : 0))).Reverse().ToArray());
+                            var glbFilename = $"{destinationPath}/_{pagePrefix}{id}";
+                            using (var builder = new GLtf.Builder(glbFilename))
                             {
-                                var id = new string(Enumerable.Range(0, lods.Count - lodDepth).Select(k => (char)('0' + ((i & (1 << k)) != 0 ? 1 : 0) | ((j & (1 << k)) != 0 ? 2 : 0))).Reverse().ToArray());
-                                var glbFilename = $"{destinationPath}/_{pagePrefix}{id}";
                                 Console.WriteLine(glbFilename);
 
                                 int endHeight = y + tileSize;
@@ -254,7 +254,7 @@ namespace NovoRender.PDFReader
                                     var meshIdx = builder.AddMesh(new[] { primitive });
                                     var nodeIdx = builder.AddNode(name: $"{(numPages> 1 ? pageIdx + 1 : 0)}", mesh: meshIdx);
                                     builder.AddScene(nodes: new[] { nodeIdx });
-                                    builder.Write(glbFilename, true);
+                                    builder.Write(true);
                                     ++filesWritten;
                                 }
                             }
@@ -272,7 +272,7 @@ namespace NovoRender.PDFReader
             var _aspect = (double)lods[0][0].Width / (double)lods[0][0].Height;
             void save(string id, (byte[] blob, string prefix, int id)[] pages) {
                 var glbFilename = $"{destinationPath}/{id}";
-                using (var builder = new GLtf.Builder())
+                using (var builder = new GLtf.Builder(glbFilename))
                 {
                     GLtf.Attribute[] attributes;
                     using (var vertexBuffer = new VertexBufferBuilderPT(builder))
@@ -310,7 +310,7 @@ namespace NovoRender.PDFReader
                         return builder.AddNode(name: page.id.ToString(), mesh: meshIdx);
                     }).ToArray();
                     builder.AddScene(nodes);
-                    builder.Write(glbFilename, true);
+                    builder.Write(true);
                 }
                 foreach(var pg in pages.Where(p => p.prefix.Length > 1).GroupBy(p => p.prefix[0])) {
                     save($"{id}{pg.Key}", pg.Select(p => (p.blob, p.prefix.Substring(1), p.id)).ToArray());
