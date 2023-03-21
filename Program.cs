@@ -151,17 +151,18 @@ namespace NovoRender.PDFReader
                     metadata.WriteLine($"{{\"id\":0,\"path\":\"{fileName}\",\"level\":0,\"type\":0,\"name\":\"{fileName}\",\"properties\":[]}}");
                     var format = string.Concat(Enumerable.Repeat("0", (int)Math.Ceiling(Math.Log10(numPages + 1))));
                     for(var i = 0; i < numPages; i++) {
-                        lods[Math.Max(0, lods.Count - 4)][i].Write(tmpFile, MagickFormat.Jpeg);
-                        var data = Convert.ToBase64String(System.IO.File.ReadAllBytes(tmpFile));
-                        var textUri = $"data:image/jpeg;base64,{data}";
+                        var preview = $"{Path.GetFileNameWithoutExtension(fileName)}_{(i + 1).ToString(format)}.jpeg";
+                        lods[Math.Max(0, lods.Count - 5)][i].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
                         var _name = $"Page {(i + 1).ToString(format)}";
-                        metadata.WriteLine($"{{\"id\":{i + 1},\"path\":\"{fileName}/{_name}\",\"level\":1,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Preview\":\"{textUri}\"]]}}");
+                        metadata.WriteLine($"{{\"id\":{i + 1},\"path\":\"{fileName}/{_name}\",\"level\":1,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Preview\":\"{preview}\"]]}}");
                     }
                 } else {
-                    lods[Math.Max(0, lods.Count - 4)][0].Write(tmpFile, MagickFormat.Jpeg);
-                    var data = Convert.ToBase64String(System.IO.File.ReadAllBytes(tmpFile));
-                    var textUri = $"data:image/jpeg;base64,{data}";
-                    metadata.WriteLine($"{{\"id\":0,\"path\":\"{fileName}\",\"level\":0,\"type\":1,\"name\":\"{fileName}\",\"properties\":[[\"Novorender/Document/Preview\",\"{textUri}\"]]}}");
+                    var preview = $"{Path.GetFileNameWithoutExtension(fileName)}.jpeg";
+                    lods[Math.Max(0, lods.Count - 5)][0].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
+                    // lods[Math.Max(0, lods.Count - 4)][0].Write(tmpFile, MagickFormat.Jpeg);
+                    // var data = Convert.ToBase64String(System.IO.File.ReadAllBytes(tmpFile));
+                    // var textUri = $"data:image/jpeg;base64,{data}";
+                    metadata.WriteLine($"{{\"id\":0,\"path\":\"{fileName}\",\"level\":0,\"type\":1,\"name\":\"{fileName}\",\"properties\":[[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
                 }
             }
 
@@ -325,10 +326,9 @@ namespace NovoRender.PDFReader
                 var y = (int)Math.Min(2048, Math.Pow(2, Math.Log2((double)image.Height)));
                 var mg = new MagickGeometry(x, y) { IgnoreAspectRatio = true };
                 image.Resize(mg);
-
+                image.Write(tmpFile, MagickFormat.Png);
+                save("asset", new [] { (System.IO.File.ReadAllBytes(tmpFile), "", 0) });
             }
-            lods[Math.Max(0, lods.Count - 5)][0].Write(tmpFile, MagickFormat.Png);
-            save("asset", new [] { (System.IO.File.ReadAllBytes(tmpFile), "", 0) });
             File.WriteAllText(destinationPath + "/asset.json", System.Text.Json.JsonSerializer.Serialize(new
             {
                 type = "document",
