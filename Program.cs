@@ -154,7 +154,7 @@ namespace NovoRender.PDFReader
                         var preview = $"{Path.GetFileNameWithoutExtension(fileName)}_{(i + 1).ToString(format)}.jpeg";
                         lods[Math.Max(0, lods.Count - 5)][i].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
                         var _name = $"Page {(i + 1).ToString(format)}";
-                        metadata.WriteLine($"{{\"id\":{i + 1},\"path\":\"{fileName}/{_name}\",\"level\":1,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Preview\":\"{preview}\"]]}}");
+                        metadata.WriteLine($"{{\"id\":{i + 1},\"path\":\"{fileName}/{_name}\",\"level\":1,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
                     }
                 } else {
                     var preview = $"{Path.GetFileNameWithoutExtension(fileName)}.jpeg";
