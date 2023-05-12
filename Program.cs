@@ -119,7 +119,7 @@ namespace NovoRender.PDFReader
                 for (var pageIdx = 0; pageIdx < collection.Count; pageIdx++)
                 {
                     var magickImage = collection[pageIdx];
-                    magickImage.ColorAlpha(MagickColor.FromRgb(255,255,255));
+                    magickImage.ColorAlpha(MagickColor.FromRgb(255, 255, 255));
                     if (pageIdx == pageTresholdReached.Count)
                     {
                         pageTresholdReached.Add(false);
@@ -144,19 +144,24 @@ namespace NovoRender.PDFReader
 
             var numPages = lods[0].Count;
             var zeroPages = Enumerable.Repeat(((byte[])null, (string)null, -1), numPages).ToArray();
-            var numPageLods = (int)Math.Ceiling(Math.Log(numPages,8));
+            var numPageLods = (int)Math.Ceiling(Math.Log(numPages, 8));
 
-            using(var metadata = File.CreateText(Path.Combine(destinationPath, "metadata"))) {
-                if(numPages > 1) {
+            using (var metadata = File.CreateText(Path.Combine(destinationPath, "metadata")))
+            {
+                if (numPages > 1)
+                {
                     metadata.WriteLine($"{{\"id\":0,\"path\":\"{fileName}\",\"level\":0,\"type\":0,\"name\":\"{fileName}\",\"properties\":[]}}");
                     var format = string.Concat(Enumerable.Repeat("0", (int)Math.Ceiling(Math.Log10(numPages + 1))));
-                    for(var i = 0; i < numPages; i++) {
+                    for (var i = 0; i < numPages; i++)
+                    {
                         var preview = $"{Path.GetFileNameWithoutExtension(fileName)}_{(i + 1).ToString(format)}.jpeg";
                         lods[Math.Max(0, lods.Count - 5)][i].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
                         var _name = $"Page {(i + 1).ToString(format)}";
                         metadata.WriteLine($"{{\"id\":{i + 1},\"path\":\"{fileName}/{_name}\",\"level\":1,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
                     }
-                } else {
+                }
+                else
+                {
                     var preview = $"{Path.GetFileNameWithoutExtension(fileName)}.jpeg";
                     lods[Math.Max(0, lods.Count - 5)][0].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
                     // lods[Math.Max(0, lods.Count - 4)][0].Write(tmpFile, MagickFormat.Jpeg);
@@ -166,7 +171,7 @@ namespace NovoRender.PDFReader
                 }
             }
 
-            var normal = new Vector3(0,0,1);
+            var normal = new Vector3(0, 0, 1);
 
             foreach (var magickImageCollection in lods)
             {
@@ -174,10 +179,12 @@ namespace NovoRender.PDFReader
                 foreach (MagickImage magickImage in magickImageCollection)
                 {
                     var pagePrefix = "";
-                    if (numPages > 1) {
+                    if (numPages > 1)
+                    {
                         var pi = pageIdx;
-                        for (var i = 0; i< numPageLods; i++) {
-                            pagePrefix = $"{(pi%8)}{pagePrefix}";
+                        for (var i = 0; i < numPageLods; i++)
+                        {
+                            pagePrefix = $"{(pi % 8)}{pagePrefix}";
                             pi /= 8;
                         }
                     }
@@ -197,6 +204,7 @@ namespace NovoRender.PDFReader
                             if (y >= magickImage.Height) break;
                             var id = new string(Enumerable.Range(0, lods.Count - lodDepth).Select(k => (char)('0' + ((i & (1 << k)) != 0 ? 1 : 0) | ((j & (1 << k)) != 0 ? 2 : 0))).Reverse().ToArray());
                             var glbFilename = $"{destinationPath}/_{pagePrefix}{id}";
+                            var imgFileName = glbFilename + ".png";
                             using (var builder = new GLtf.Builder(glbFilename))
                             {
                                 Console.WriteLine(glbFilename);
@@ -207,14 +215,15 @@ namespace NovoRender.PDFReader
                                 var tiledImage = new MagickImage();
                                 var settings = new PixelReadSettings(dx, dy, StorageType.Quantum, PixelMapping.RGB);
                                 tiledImage.ReadPixels(pixelArea.AsSpan(), settings);
-                                if(dx != tileSize || dy != tileSize) {
+                                if (dx != tileSize || dy != tileSize)
+                                {
                                     var mg = new MagickGeometry(tileSize) { IgnoreAspectRatio = true };
                                     tiledImage.Resize(mg);
                                 }
                                 tiledImage.Format = MagickFormat.Png;
-                                tiledImage.Write(tmpFile);
+                                tiledImage.Write(imgFileName);
 
-                                var imgBlob = System.IO.File.ReadAllBytes(tmpFile);
+                                var imgBlob = System.IO.File.ReadAllBytes(imgFileName);
                                 if (lods.Count == lodDepth) zeroPages[pageIdx] = (imgBlob, pagePrefix, pageIdx + 1);
                                 var (bufferBegin, bufferEnd) = builder.Buffer.AddRange(imgBlob);
                                 var imageBufferView = builder.AddBufferView(0, imgBlob.Length, bufferBegin);
@@ -253,7 +262,7 @@ namespace NovoRender.PDFReader
                                         };
                                     var primitive = builder.CreatePrimitive(attributes, mode: GLtf.DrawMode.TRIANGLES, material: material);
                                     var meshIdx = builder.AddMesh(new[] { primitive });
-                                    var nodeIdx = builder.AddNode(name: $"{(numPages> 1 ? pageIdx + 1 : 0)}", mesh: meshIdx);
+                                    var nodeIdx = builder.AddNode(name: $"{(numPages > 1 ? pageIdx + 1 : 0)}", mesh: meshIdx);
                                     builder.AddScene(nodes: new[] { nodeIdx });
                                     builder.Write(true);
                                     ++filesWritten;
@@ -271,7 +280,8 @@ namespace NovoRender.PDFReader
                 ++lodDepth;
             }
             var _aspect = (double)lods[0][0].Width / (double)lods[0][0].Height;
-            void save(string id, (byte[] blob, string prefix, int id)[] pages) {
+            void save(string id, (byte[] blob, string prefix, int id)[] pages)
+            {
                 var glbFilename = $"{destinationPath}/{id}";
                 using (var builder = new GLtf.Builder(glbFilename))
                 {
@@ -298,7 +308,8 @@ namespace NovoRender.PDFReader
                             builder.CreateAttribute("TEXCOORD_0", uvAccessor),
                         };
                     }
-                    var nodes = pages.Select((page, i) => {
+                    var nodes = pages.Select((page, i) =>
+                    {
                         var (bufferBegin, bufferEnd) = builder.Buffer.AddRange(page.blob);
                         var imageBufferView = builder.AddBufferView(0, page.blob.Length, bufferBegin);
                         var imgIdx = builder.AddImage("image/png", imageBufferView);
@@ -313,11 +324,13 @@ namespace NovoRender.PDFReader
                     builder.AddScene(nodes);
                     builder.Write(true);
                 }
-                foreach(var pg in pages.Where(p => p.prefix.Length > 1).GroupBy(p => p.prefix[0])) {
+                foreach (var pg in pages.Where(p => p.prefix.Length > 1).GroupBy(p => p.prefix[0]))
+                {
                     save($"{id}{pg.Key}", pg.Select(p => (p.blob, p.prefix.Substring(1), p.id)).ToArray());
                 }
             }
-            if (numPages > 1) {
+            if (numPages > 1)
+            {
                 save("_", zeroPages);
             }
             {
@@ -327,7 +340,7 @@ namespace NovoRender.PDFReader
                 var mg = new MagickGeometry(x, y) { IgnoreAspectRatio = true };
                 image.Resize(mg);
                 image.Write(tmpFile, MagickFormat.Png);
-                save("asset", new [] { (System.IO.File.ReadAllBytes(tmpFile), "", 0) });
+                save("asset", new[] { (System.IO.File.ReadAllBytes(tmpFile), "", 0) });
             }
             File.WriteAllText(destinationPath + "/asset.json", System.Text.Json.JsonSerializer.Serialize(new
             {
