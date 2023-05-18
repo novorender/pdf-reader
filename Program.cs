@@ -146,14 +146,16 @@ namespace NovoRender.PDFReader
             var zeroPages = Enumerable.Repeat(((byte[])null, (string)null, -1), numPages).ToArray();
             var numPageLods = (int)Math.Ceiling(Math.Log(numPages,8));
 
+            string pageFormat = null;
+
             using(var metadata = File.CreateText(Path.Combine(destinationPath, "metadata"))) {
                 if(numPages > 1) {
                     metadata.WriteLine($"{{\"id\":0,\"path\":\"{fileName}\",\"level\":0,\"type\":0,\"name\":\"{fileName}\",\"properties\":[]}}");
-                    var format = string.Concat(Enumerable.Repeat("0", (int)Math.Ceiling(Math.Log10(numPages + 1))));
+                    pageFormat = string.Concat(Enumerable.Repeat("0", (int)Math.Ceiling(Math.Log10(numPages + 1))));
                     for(var i = 0; i < numPages; i++) {
-                        var preview = $"{Path.GetFileNameWithoutExtension(fileName)}_{(i + 1).ToString(format)}.jpeg";
+                        var preview = $"{Path.GetFileNameWithoutExtension(fileName)}_{(i + 1).ToString(pageFormat)}.jpeg";
                         lods[Math.Max(0, lods.Count - 5)][i].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
-                        var _name = $"Page {(i + 1).ToString(format)}";
+                        var _name = $"Page {(i + 1).ToString(pageFormat)}";
                         metadata.WriteLine($"{{\"id\":{i + 1},\"path\":\"{fileName}/{_name}\",\"level\":1,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
                     }
                 } else {
@@ -211,6 +213,9 @@ namespace NovoRender.PDFReader
                                     var mg = new MagickGeometry(tileSize) { IgnoreAspectRatio = true };
                                     tiledImage.Resize(mg);
                                 }
+                                tiledImage.Write(Path.Combine(destinationPath, $"{Path.GetFileNameWithoutExtension(fileName)}"
+                                    + (string.IsNullOrWhiteSpace(pageFormat) ? "" : $"_{(pageIdx + 1).ToString(pageFormat)}")
+                                    + $"_{id}.jpeg"));
                                 tiledImage.Format = MagickFormat.Png;
                                 tiledImage.Write(tmpFile);
 
