@@ -19,6 +19,6 @@
   </ItemGroup>
 
   <Target Name="CopyNativeDLLs" AfterTargets="Publish">
-    <Copy SourceFiles=".\bin\x64\release\net6.0\win-x64\gltf_api.dll" DestinationFolder="$(PublishDir)" />
+    <Copy SourceFiles=".\bin\x64\Release\net6.0\gltf_api.dll" DestinationFolder="$(PublishDir)" />
   </Target>
 </Project>
