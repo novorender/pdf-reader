@@ -17,6 +17,11 @@
     <PackageReference Include="NovoRender.GLtf" Version="0.0.60" />
     <PackageReference Include="Magick.NET-Q16-x64" Version="12.1.0" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="gsdll64.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 
   <Target Name="CopyNativeDLLs" AfterTargets="Publish">
     <Copy SourceFiles=".\bin\x64\Release\net6.0\gltf_api.dll" DestinationFolder="$(PublishDir)" />
