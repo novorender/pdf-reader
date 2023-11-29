@@ -152,7 +152,6 @@ namespace NovoRender.PDFReader
             {
                 if (numPages > 1)
                 {
-                    metadata.WriteLine($"{{\"id\":0,\"path\":\"{fileName}\",\"level\":0,\"type\":0,\"name\":\"{fileName}\",\"properties\":[]}}");
                     pageFormat = string.Concat(Enumerable.Repeat("0", (int)Math.Ceiling(Math.Log10(numPages + 1))));
                     for (var i = 0; i < numPages; i++)
                     {
@@ -161,7 +160,7 @@ namespace NovoRender.PDFReader
                         var height = lods[0][i].Height;
                         lods[Math.Max(0, lods.Count - 5)][i].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
                         var _name = $"Page {(i + 1).ToString(pageFormat)}";
-                        metadata.WriteLine($"{{\"id\":{i + 1},\"path\":\"{fileName}/{_name}\",\"level\":1,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
+                        metadata.WriteLine($"{{\"id\":{i},\"path\":\"{_name}\",\"level\":0,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
                     }
                 }
                 else
@@ -173,7 +172,7 @@ namespace NovoRender.PDFReader
                     // lods[Math.Max(0, lods.Count - 4)][0].Write(tmpFile, MagickFormat.Jpeg);
                     // var data = Convert.ToBase64String(System.IO.File.ReadAllBytes(tmpFile));
                     // var textUri = $"data:image/jpeg;base64,{data}";
-                    metadata.WriteLine($"{{\"id\":0,\"path\":\"{fileName}\",\"level\":0,\"type\":1,\"name\":\"{fileName}\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
+                    metadata.WriteLine($"{{\"id\":0,\"path\":\"\",\"level\":0,\"type\":1,\"name\":\"\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
                 }
             }
 
@@ -232,7 +231,7 @@ namespace NovoRender.PDFReader
                                 tiledImage.Write(tmpFile);
 
                                 var imgBlob = System.IO.File.ReadAllBytes(tmpFile);
-                                if (lods.Count == lodDepth) zeroPages[pageIdx] = (imgBlob, pagePrefix, pageIdx + 1);
+                                if (lods.Count == lodDepth) zeroPages[pageIdx] = (imgBlob, pagePrefix, pageIdx);
                                 var (bufferBegin, bufferEnd) = builder.Buffer.AddRange(imgBlob);
                                 var imageBufferView = builder.AddBufferView(0, imgBlob.Length, bufferBegin);
                                 var imgIdx = builder.AddImage("image/png", imageBufferView);
@@ -270,7 +269,7 @@ namespace NovoRender.PDFReader
                                         };
                                     var primitive = builder.CreatePrimitive(attributes, mode: GLtf.DrawMode.TRIANGLES, material: material);
                                     var meshIdx = builder.AddMesh(new[] { primitive });
-                                    var nodeIdx = builder.AddNode(name: $"{(numPages > 1 ? pageIdx + 1 : 0)}", mesh: meshIdx);
+                                    var nodeIdx = builder.AddNode(name: pageIdx.ToString(), mesh: meshIdx);
                                     builder.AddScene(nodes: new[] { nodeIdx });
                                     builder.Write(true);
                                     ++filesWritten;
