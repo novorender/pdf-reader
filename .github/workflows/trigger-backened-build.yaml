@@ -1,0 +1,23 @@
+name: Trigger import workflow
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  trigger-workflow:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.cicd }}
+        script: |
+          await github.rest.actions.createWorkflowDispatch({
+            owner: 'novorender',
+            repo: 'novorender-backend',
+            workflow_id: 'import.yml',
+            ref: 'master'
+          })
