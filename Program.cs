@@ -166,7 +166,7 @@ namespace NovoRender.PDFReader
                 else
                 {
                     var preview = $"{Path.GetFileNameWithoutExtension(fileName)}.jpeg";
-                    lods[Math.Max(0, lods.Count - 5)][0].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
+                    lods[Math.Max(0, lods.Count - 7)][0].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
                     var width = lods[0][0].Width;
                     var height = lods[0][0].Height;
                     // lods[Math.Max(0, lods.Count - 4)][0].Write(tmpFile, MagickFormat.Jpeg);
@@ -381,7 +381,7 @@ namespace NovoRender.PDFReader
                         Radius = Math.Sqrt(0.25 + 0.25 * _aspect * _aspect)
                     }
                 },
-                parsers = new [] {new [] {"pdf_reader", "1.0"}}
+                parsers = new[] { new[] { "pdf_reader", "1.0" } }
             }));
             string[] tmpFiles = Directory.GetFiles(tmpDir.ToString());
             foreach (var tmpFile in tmpFiles)
