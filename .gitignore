@@ -4,3 +4,5 @@ bin/
 *.wsuo
 *.suo
 .vs/
+.idea/
+*.DotSettings.user
