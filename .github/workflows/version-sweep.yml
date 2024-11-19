@@ -1,0 +1,13 @@
+name: "Target supported version"
+
+on:
+  schedule:
+    - cron: "0 0 1 * *"
+  workflow_dispatch:
+
+jobs:
+  version-sweep:
+    uses: novorender/infrastructure/.github/workflows/version-sweep.yml@main
+    with:
+        support: "STS"
+    secrets: inherit
