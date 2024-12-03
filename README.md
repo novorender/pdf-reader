@@ -1,2 +1,2 @@
 # pdf-reader
-placed in its own repdo due to lisence. Imports PDF and create tiled (quadtree) export read for for octree. The pdf reader is also responsible for creating jpg images for thumbnails and preview
+Placed in its own repo due to lisence. Imports PDF and create images for thumbnails and preivew. It is also used to generate a quadtree which can be picked up by our frontend Api. 
