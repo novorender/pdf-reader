@@ -1,2 +1,2 @@
 # pdf-reader
-Placed in its own repo due to lisence. Imports PDF and create images for thumbnails and preivew. It is also used to generate a quadtree which can be picked up by our frontend Api. 
+Placed in its own repository due to licensing. Imports PDF files and creates images for thumbnails and previews. It is also used to generate a quadtree, which can be utilized by our frontend API.
