@@ -14,12 +14,12 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CommandLineArgumentsParser" Version="3.0.22" />
-    <PackageReference Include="NovoRender.GLtf" Version="0.0.60" />
+    <PackageReference Include="NovoRender.GLtf" Version="0.0.65" />
     <PackageReference Include="Magick.NET-Q16-x64" Version="13.9.1" />
   </ItemGroup>
   <ItemGroup>
     <None Update="gsdll64.dll">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 
