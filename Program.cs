@@ -48,8 +48,8 @@ namespace NovoRender.PDFReader
 
         public (int positionAccessor, int normalAccessor, int uvAccessor) Finish()
         {
-            var minPos = new System.DoubleNumerics.Vector3(_minPosition.X, _minPosition.Y, _minPosition.Z);
-            var maxPos = new System.DoubleNumerics.Vector3(_maxPosition.X, _maxPosition.Y, _maxPosition.Z);
+            var minPos = new Speckle.DoubleNumerics.Vector3(_minPosition.X, _minPosition.Y, _minPosition.Z);
+            var maxPos = new Speckle.DoubleNumerics.Vector3(_maxPosition.X, _maxPosition.Y, _maxPosition.Z);
             var bufferView = _builder.AddBufferView(_buffer, _count * _byteStride, _byteOffset, _byteStride, GLtf.BufferTarget.ARRAY_BUFFER);
             var positionAccessor = _builder.AddAccessor(GLtf.ComponentType.FLOAT, _count, "VEC3", bufferView, 0, minPos, maxPos);
             var normalAccessor = _builder.AddAccessor(GLtf.ComponentType.FLOAT, _count, "VEC3", bufferView, 12);
@@ -237,7 +237,7 @@ namespace NovoRender.PDFReader
                                 var imgIdx = builder.AddImage("image/png", imageBufferView);
                                 var baseTexture = builder.AddTexture(imgIdx, null);
 
-                                var material = builder.AddUnlitMaterial(rgba: new System.DoubleNumerics.Vector4(1, 1, 1, 1), alphaMode: GLtf.AlphaMode.BLEND, baseColorTexture: builder.CreateTextureInfo(baseTexture), doubleSided: true);
+                                var material = builder.AddUnlitMaterial(rgba: new Speckle.DoubleNumerics.Vector4(1, 1, 1, 1), alphaMode: GLtf.AlphaMode.BLEND, baseColorTexture: builder.CreateTextureInfo(baseTexture), doubleSided: true);
 
                                 using (var vertexBuffer = new VertexBufferBuilderPT(builder))
                                 {
@@ -322,7 +322,7 @@ namespace NovoRender.PDFReader
                         var imgIdx = builder.AddImage("image/png", imageBufferView);
                         var baseTexture = builder.AddTexture(imgIdx, null);
 
-                        var material = builder.AddUnlitMaterial(rgba: new System.DoubleNumerics.Vector4(1, 1, 1, 1), alphaMode: GLtf.AlphaMode.BLEND, baseColorTexture: builder.CreateTextureInfo(baseTexture), doubleSided: true);
+                        var material = builder.AddUnlitMaterial(rgba: new Speckle.DoubleNumerics.Vector4(1, 1, 1, 1), alphaMode: GLtf.AlphaMode.BLEND, baseColorTexture: builder.CreateTextureInfo(baseTexture), doubleSided: true);
 
                         var primitive = builder.CreatePrimitive(attributes, mode: GLtf.DrawMode.TRIANGLES, material: material);
                         var meshIdx = builder.AddMesh(new[] { primitive });
