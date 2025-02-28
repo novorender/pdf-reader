@@ -10,7 +10,7 @@
             "request": "launch",
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
-            "program": "${workspaceFolder}/bin/x64/Debug/net8.0/PdfReader.exe",
+            "program": "${workspaceFolder}/bin/x64/Debug/net9.0/PdfReader.exe",
             "args": [
                 "-i", "E:\\VSOUT\\PDF\\Vestbygget\\A-PL-V-200-0100 Plan-01.pdf",
                 "-o", "E:\\Tmp\\NovoSales\\PDF",
