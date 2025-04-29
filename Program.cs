@@ -61,6 +61,10 @@ namespace NovoRender.PDFReader
 
     class Program
     {
+        private const string EpsgPrefix = "EPSG:";
+
+        private const int Wgs84Epsg = 4326;
+
         static int Main(string[] args)
         {
             System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
@@ -79,10 +83,30 @@ namespace NovoRender.PDFReader
             // }
 
             PdfToImageConverter pdf = new PdfToImageConverter(arguments.File);
-            pdf.ConvertFileToImages(arguments.File, arguments.OutputFolder.FullName, arguments.Density, arguments.TileSize);
+            pdf.ConvertFileToImages(arguments.File, arguments.OutputFolder.FullName, arguments.Density, arguments.TileSize, GetEpsgCode(arguments.Epsg));
             timer.Stop();
             Console.WriteLine($"Write complete in {timer.Elapsed}");
             return 0;
+        }
+
+        private static int GetEpsgCode(ReadOnlySpan<char> epsg)
+        {
+            if (epsg.IsEmpty)
+            {
+                return Wgs84Epsg;
+            }
+
+            if (epsg.StartsWith(EpsgPrefix))
+            {
+                epsg = epsg[EpsgPrefix.Length..];
+            }
+
+            if (int.TryParse(epsg, out var epsgCode))
+            {
+                return epsgCode;
+            }
+
+            throw new ArgumentException($"Invalid EPSG code: {epsg.ToString()}");
         }
     }
 
@@ -98,7 +122,7 @@ namespace NovoRender.PDFReader
             MagickNET.SetTempDirectory(tmpDir.ToString());
             tmpFile = tmpDir.ToString() + "\\tmp.png";
         }
-        public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, int tileSize)
+        public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, int tileSize, int epsg)
         {
             var fileName = file.Name;
 

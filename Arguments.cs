@@ -39,6 +39,9 @@ namespace NovoRender.PDFReader
         [ValueArgument(typeof(int), "tile-size", Optional = true, Example = "256", DefaultValue = 256, Description = "Tile size")]
         public int TileSize { get; set; }
 
+        [ValueArgument(typeof(string), 'e', "epsg", Optional = true, Example = "EPSG:4326", DefaultValue = "EPSG:4326", Description = "EPSG code")]
+        public string Epsg { get; set; }
+
         [ValueArgument(typeof(double), "density", Optional = true, Example = "500", DefaultValue = 500, Description = "PDF density")]
         public double Density { get; set; }
     }
