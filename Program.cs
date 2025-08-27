@@ -3,8 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using GLtf = Novorender.GLtf;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using ImageMagick;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -122,7 +120,7 @@ namespace NovoRender.PDFReader
             MagickNET.SetTempDirectory(tmpDir.ToString());
             tmpFile = tmpDir.ToString() + "\\tmp.png";
         }
-        public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, int tileSize, int epsg)
+        public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, uint tileSize, int epsg)
         {
             var fileName = file.Name;
 
@@ -221,15 +219,15 @@ namespace NovoRender.PDFReader
                     var maxSize = (double)Math.Max(magickImage.Width, magickImage.Height);
                     var noIteration = (int)Math.Pow(2, Math.Ceiling(Math.Log2(Math.Ceiling(maxSize / (double)tileSize))));
                     var wsD = (double)tileSize / (double)magickImage.Height;
-                    for (var i = 0; i < noIteration; ++i)
+                    for (uint i = 0; i < noIteration; ++i)
                     {
-                        int x = i * tileSize;
+                        uint x = i * tileSize;
                         if (x >= magickImage.Width) break;
-                        int endWidth = x + tileSize;
-                        int dx = endWidth > magickImage.Width ? magickImage.Width - x : tileSize;
-                        for (var j = 0; j < noIteration; ++j)
+                        uint endWidth = x + tileSize;
+                        uint dx = endWidth > magickImage.Width ? magickImage.Width - x : tileSize;
+                        for (uint j = 0; j < noIteration; ++j)
                         {
-                            int y = j * tileSize;
+                            uint y = j * tileSize;
                             if (y >= magickImage.Height) break;
                             var id = new string(Enumerable.Range(0, lods.Count - lodDepth).Select(k => (char)('0' + ((i & (1 << k)) != 0 ? 1 : 0) | ((j & (1 << k)) != 0 ? 2 : 0))).Reverse().ToArray());
                             var glbFilename = $"{destinationPath}/_{pagePrefix}{id}";
@@ -237,9 +235,9 @@ namespace NovoRender.PDFReader
                             {
                                 Console.WriteLine(glbFilename);
 
-                                int endHeight = y + tileSize;
-                                int dy = endHeight > magickImage.Height ? magickImage.Height - y : tileSize;
-                                var pixelArea = pixels.GetArea(x, y, dx, dy);
+                                uint endHeight = y + tileSize;
+                                uint dy = endHeight > magickImage.Height ? magickImage.Height - y : tileSize;
+                                var pixelArea = pixels.GetArea((int)x, (int)y, dx, dy);
                                 var tiledImage = new MagickImage();
                                 var settings = new PixelReadSettings(dx, dy, StorageType.Quantum, PixelMapping.RGB);
                                 tiledImage.ReadPixels(pixelArea.AsSpan(), settings);
@@ -366,8 +364,8 @@ namespace NovoRender.PDFReader
             }
             {
                 var image = lods[Math.Max(0, lods.Count - 5)][0];
-                var x = (int)Math.Min(2048, Math.Pow(2, Math.Log2((double)image.Width)));
-                var y = (int)Math.Min(2048, Math.Pow(2, Math.Log2((double)image.Height)));
+                var x = (uint)Math.Min(2048, Math.Pow(2, Math.Log2(image.Width)));
+                var y = (uint)Math.Min(2048, Math.Pow(2, Math.Log2(image.Height)));
                 var mg = new MagickGeometry(x, y) { IgnoreAspectRatio = true };
                 image.Resize(mg);
                 image.Write(tmpFile, MagickFormat.Png);
