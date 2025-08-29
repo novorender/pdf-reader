@@ -36,8 +36,8 @@ namespace NovoRender.PDFReader
         [DirectoryArgument('o', "output", Optional = false, Example = "outdir", DirectoryMustExist = false, Description = "Output directory")]
         public DirectoryInfo OutputFolder { get; set; }
 
-        [ValueArgument(typeof(int), "tile-size", Optional = true, Example = "256", DefaultValue = 256, Description = "Tile size")]
-        public int TileSize { get; set; }
+        [ValueArgument(typeof(uint), "tile-size", Optional = true, Example = "256", DefaultValue = 256U, Description = "Tile size")]
+        public uint TileSize { get; set; }
 
         [ValueArgument(typeof(string), 'e', "epsg", Optional = true, Example = "EPSG:4326", DefaultValue = "EPSG:4326", Description = "EPSG code")]
         public string Epsg { get; set; }
