@@ -125,7 +125,6 @@ namespace NovoRender.PDFReader
             var fileName = file.Name;
 
             double currentDensity = initialDensity;
-            ;
             var pageTresholdReached = new List<bool>();
             int lodDepth = 1;
             int filesWritten = 0;
@@ -375,6 +374,7 @@ namespace NovoRender.PDFReader
             {
                 type = "document",
                 levels = lodDepth,
+                objects = numPages,
                 bounds = new
                 {
                     box = new
@@ -414,4 +414,5 @@ namespace NovoRender.PDFReader
         }
     }
 }
+
 
