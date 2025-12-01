@@ -375,6 +375,7 @@ namespace NovoRender.PDFReader
                 type = "document",
                 levels = lodDepth,
                 objects = numPages,
+                geometryTypes = 2, //PDF
                 bounds = new
                 {
                     box = new
@@ -414,5 +415,6 @@ namespace NovoRender.PDFReader
         }
     }
 }
+
 
 
