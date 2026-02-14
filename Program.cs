@@ -372,6 +372,7 @@ namespace NovoRender.PDFReader
             }
             File.WriteAllText(destinationPath + "/asset.json", System.Text.Json.JsonSerializer.Serialize(new
             {
+                version = "1.0",
                 type = "document",
                 levels = lodDepth,
                 objects = numPages,
@@ -415,6 +416,7 @@ namespace NovoRender.PDFReader
         }
     }
 }
+
 
 
 
