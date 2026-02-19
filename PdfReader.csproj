@@ -24,6 +24,6 @@
   </ItemGroup>
 
   <Target Name="CopyNativeDLLs" AfterTargets="Publish">
-    <Copy SourceFiles=".\bin\x64\Release\net10.0\win-x64\gsdll64.dll" DestinationFolder="$(PublishDir)" />
+    <Copy SourceFiles=".\bin\x64\$(Configuration)\$(TargetFramework)\win-x64\gsdll64.dll" DestinationFolder="$(PublishDir)" />
   </Target>
 </Project>
