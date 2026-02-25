@@ -154,12 +154,48 @@ namespace NovoRender.PDFReader
             if (match.Success)
             {
                 var raw = match.Groups[1].Value;
-                var sb = new StringBuilder(raw.Length * 2);
-                foreach (var c in raw)
+                var bytes = new List<byte>(raw.Length);
+                for (var i = 0; i < raw.Length; i++)
                 {
-                    sb.Append(((byte)c).ToString("x2"));
+                    if (raw[i] == '\\' && i + 1 < raw.Length)
+                    {
+                        i++;
+                        switch (raw[i])
+                        {
+                            case 'n': bytes.Add((byte)'\n'); break;
+                            case 'r': bytes.Add((byte)'\r'); break;
+                            case 't': bytes.Add((byte)'\t'); break;
+                            case 'b': bytes.Add((byte)'\b'); break;
+                            case 'f': bytes.Add((byte)'\f'); break;
+                            case '(': bytes.Add((byte)'('); break;
+                            case ')': bytes.Add((byte)')'); break;
+                            case '\\': bytes.Add((byte)'\\'); break;
+                            default:
+                                // Octal escape: up to 3 digits
+                                if (raw[i] is >= '0' and <= '7')
+                                {
+                                    var octal = raw[i] - '0';
+                                    for (var j = 0; j < 2 && i + 1 < raw.Length && raw[i + 1] is >= '0' and <= '7'; j++)
+                                    {
+                                        i++;
+                                        octal = octal * 8 + (raw[i] - '0');
+                                    }
+                                    bytes.Add((byte)(octal & 0xFF));
+                                }
+                                else
+                                {
+                                    // Unknown escape - ignore the backslash per PDF spec
+                                    bytes.Add((byte)raw[i]);
+                                }
+                                break;
+                        }
+                    }
+                    else
+                    {
+                        bytes.Add((byte)raw[i]);
+                    }
                 }
-                return sb.ToString();
+                return Convert.ToHexStringLower(bytes.ToArray());
             }
 
             // Fallback: SHA-256 of the entire file
