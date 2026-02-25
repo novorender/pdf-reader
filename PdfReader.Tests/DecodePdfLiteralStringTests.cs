@@ -72,4 +72,26 @@ public class DecodePdfLiteralStringTests
         var result = PdfDocumentId.DecodePdfLiteralString("A\\");
         Assert.Equal([(byte)'A', (byte)'\\'], result);
     }
+
+    [Fact]
+    public void LineContinuation_LF()
+    {
+        // Backslash + LF is ignored per PDF spec
+        var result = PdfDocumentId.DecodePdfLiteralString("A\\\nB");
+        Assert.Equal("AB"u8.ToArray(), result);
+    }
+
+    [Fact]
+    public void LineContinuation_CR()
+    {
+        var result = PdfDocumentId.DecodePdfLiteralString("A\\\rB");
+        Assert.Equal("AB"u8.ToArray(), result);
+    }
+
+    [Fact]
+    public void LineContinuation_CRLF()
+    {
+        var result = PdfDocumentId.DecodePdfLiteralString("A\\\r\nB");
+        Assert.Equal("AB"u8.ToArray(), result);
+    }
 }

@@ -53,6 +53,34 @@ public class TryExtractIdTests
     }
 
     [Fact]
+    public void LiteralString_WithBalancedParentheses()
+    {
+        // Balanced nested parentheses are valid in PDF literal strings
+        var tail = "trailer\n<</ID [(A(B)C) (ignored)]>>";
+
+        Assert.True(PdfDocumentId.TryExtractId(tail, out var id));
+        Assert.Equal("4128422943", id); // A=41, (=28, B=42, )=29, C=43
+    }
+
+    [Fact]
+    public void LiteralString_Empty_ReturnsFalse()
+    {
+        var tail = "trailer\n<</ID [() (ignored)]>>";
+
+        Assert.False(PdfDocumentId.TryExtractId(tail, out var id));
+        Assert.Null(id);
+    }
+
+    [Fact]
+    public void HexString_OddDigits_AppendTrailingZero()
+    {
+        var tail = "trailer\n<</ID [<ABC> <ignored>]>>";
+
+        Assert.True(PdfDocumentId.TryExtractId(tail, out var id));
+        Assert.Equal("abc0", id);
+    }
+
+    [Fact]
     public void NoMatch_ReturnsFalse()
     {
         var tail = "trailer\n<</Size 42>>";

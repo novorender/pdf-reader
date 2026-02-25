@@ -36,7 +36,7 @@ public static partial class PdfDocumentId
 
             if (TryExtractId(tail, out var id))
             {
-                return id;
+                return id!;
             }
 
             if (windowSize >= length || windowSize >= maxWindow)
@@ -53,24 +53,41 @@ public static partial class PdfDocumentId
         return Convert.ToHexStringLower(hash);
     }
 
-    public static bool TryExtractId(string tail, out string id)
+    public static bool TryExtractId(string tail, out string? id)
     {
         // Look for /ID [ <hex> ... ] or /ID [ (...) ... ]
         var match = HexStringIdRegex().Match(tail);
         if (match.Success)
         {
-            id = WhitespaceRegex().Replace(match.Groups[1].Value, "").ToLowerInvariant();
+            var hex = WhitespaceRegex().Replace(match.Groups[1].Value, "");
+            // PDF spec: odd number of hex digits gets a trailing 0
+            if (hex.Length % 2 != 0)
+            {
+                hex += "0";
+            }
+            id = hex.ToLowerInvariant();
             return true;
         }
 
-        match = LiteralStringIdRegex().Match(tail);
+        match = LiteralStringIdStartRegex().Match(tail);
         if (match.Success)
         {
-            id = Convert.ToHexStringLower(DecodePdfLiteralString(match.Groups[1].Value));
-            return true;
+            var contentStart = match.Index + match.Length;
+            var content = ExtractLiteralStringBody(tail, contentStart);
+            if (content != null)
+            {
+                var decoded = DecodePdfLiteralString(content);
+                if (decoded.Length == 0)
+                {
+                    id = null;
+                    return false;
+                }
+                id = Convert.ToHexStringLower(decoded);
+                return true;
+            }
         }
 
-        id = null!;
+        id = null;
         return false;
     }
 
@@ -92,6 +109,12 @@ public static partial class PdfDocumentId
                     case '(': bytes.Add((byte)'('); break;
                     case ')': bytes.Add((byte)')'); break;
                     case '\\': bytes.Add((byte)'\\'); break;
+                    // Line continuation: backslash + EOL is ignored per PDF spec
+                    case '\r':
+                        if (i + 1 < raw.Length && raw[i + 1] == '\n') i++;
+                        break;
+                    case '\n':
+                        break;
                     default:
                         // Octal escape: up to 3 digits
                         if (raw[i] is >= '0' and <= '7')
@@ -123,8 +146,38 @@ public static partial class PdfDocumentId
     [GeneratedRegex(@"/ID\s*\[\s*<([0-9A-Fa-f\s]+)>")]
     private static partial Regex HexStringIdRegex();
 
-    [GeneratedRegex(@"/ID\s*\[\s*\(((?:\\.|[^)\\])*)\)")]
-    private static partial Regex LiteralStringIdRegex();
+    /// <summary>
+    /// Extracts the body of a PDF literal string starting at <paramref name="start"/>,
+    /// handling balanced parentheses and escape sequences per the PDF spec.
+    /// Returns the raw content (without outer parens), or null if no valid string is found.
+    /// </summary>
+    private static string? ExtractLiteralStringBody(string text, int start)
+    {
+        var depth = 1;
+        var i = start;
+        while (i < text.Length && depth > 0)
+        {
+            switch (text[i])
+            {
+                case '\\':
+                    i++; // skip escaped character
+                    break;
+                case '(':
+                    depth++;
+                    break;
+                case ')':
+                    depth--;
+                    break;
+            }
+            i++;
+        }
+        if (depth != 0) return null;
+        // i is one past the closing ')', content is between start and i-1
+        return text[start..(i - 1)];
+    }
+
+    [GeneratedRegex(@"/ID\s*\[\s*\(")]
+    private static partial Regex LiteralStringIdStartRegex();
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRegex();
