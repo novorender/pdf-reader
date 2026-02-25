@@ -123,7 +123,7 @@ public static partial class PdfDocumentId
     [GeneratedRegex(@"/ID\s*\[\s*<([0-9A-Fa-f\s]+)>")]
     private static partial Regex HexStringIdRegex();
 
-    [GeneratedRegex(@"/ID\s*\[\s*\(([^)]*)\)")]
+    [GeneratedRegex(@"/ID\s*\[\s*\(((?:\\.|[^)\\])*)\)")]
     private static partial Regex LiteralStringIdRegex();
 
     [GeneratedRegex(@"\s+")]

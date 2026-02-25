@@ -43,6 +43,16 @@ public class TryExtractIdTests
     }
 
     [Fact]
+    public void LiteralString_WithEscapedParentheses()
+    {
+        // Binary ID containing 0x29 ')' encoded as \) in the literal string
+        var tail = "trailer\n<</ID [(A\\)B) (ignored)]>>";
+
+        Assert.True(PdfDocumentId.TryExtractId(tail, out var id));
+        Assert.Equal("412942", id); // A=0x41, )=0x29, B=0x42
+    }
+
+    [Fact]
     public void NoMatch_ReturnsFalse()
     {
         var tail = "trailer\n<</Size 42>>";
