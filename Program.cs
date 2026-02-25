@@ -141,7 +141,7 @@ namespace NovoRender.PDFReader
             stream.Seek(-tailLength, SeekOrigin.End);
             var buffer = new byte[tailLength];
             stream.ReadExactly(buffer);
-            var tail = Encoding.ASCII.GetString(buffer);
+            var tail = Encoding.Latin1.GetString(buffer);
 
             // Look for /ID [ <hex> ... ] or /ID [ (...) ... ]
             var match = HexStringIdRegex().Match(tail);
