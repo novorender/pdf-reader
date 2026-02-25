@@ -2,6 +2,9 @@
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 using GLtf = Novorender.GLtf;
 using ImageMagick;
 using System.Numerics;
@@ -108,7 +111,7 @@ namespace NovoRender.PDFReader
         }
     }
 
-    public class PdfToImageConverter
+    public partial class PdfToImageConverter
     {
         DirectoryInfo tmpDir;
         string tmpFile;
@@ -120,9 +123,55 @@ namespace NovoRender.PDFReader
             MagickNET.SetTempDirectory(tmpDir.ToString());
             tmpFile = tmpDir.ToString() + "\\tmp.png";
         }
+
+        /// <summary>
+        /// Extracts a stable document identifier from a PDF file.
+        /// Per the PDF spec (§14.4), the trailer may contain an /ID entry - an array of two
+        /// byte-strings. The first element is a permanent identifier based on the file's
+        /// original contents and is stable across saves; we use that as the document ID.
+        /// The /ID value can appear as a hex string (&lt;...&gt;) or a literal string ((...));
+        /// both forms are handled and normalized to a lowercase hex string.
+        /// If no /ID entry is found, falls back to a SHA-256 hash of the entire file.
+        /// </summary>
+        static string GetDocumentId(FileInfo file)
+        {
+            // Read just the tail of the file - the trailer is always near the end
+            using var stream = file.OpenRead();
+            var tailLength = (int)Math.Min(stream.Length, 8192);
+            stream.Seek(-tailLength, SeekOrigin.End);
+            var buffer = new byte[tailLength];
+            stream.ReadExactly(buffer);
+            var tail = Encoding.ASCII.GetString(buffer);
+
+            // Look for /ID [ <hex> ... ] or /ID [ (...) ... ]
+            var match = HexStringIdRegex().Match(tail);
+            if (match.Success)
+            {
+                return match.Groups[1].Value.ToLowerInvariant();
+            }
+
+            match = LiteralStringIdRegex().Match(tail);
+            if (match.Success)
+            {
+                var raw = match.Groups[1].Value;
+                var sb = new StringBuilder(raw.Length * 2);
+                foreach (var c in raw)
+                {
+                    sb.Append(((byte)c).ToString("x2"));
+                }
+                return sb.ToString();
+            }
+
+            // Fallback: SHA-256 of the entire file
+            stream.Seek(0, SeekOrigin.Begin);
+            var hash = SHA256.HashData(stream);
+            return Convert.ToHexStringLower(hash);
+        }
+
         public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, uint tileSize, int epsg)
         {
             var fileName = file.Name;
+            var documentId = GetDocumentId(file);
 
             double currentDensity = initialDensity;
             var pageTresholdReached = new List<bool>();
@@ -181,7 +230,7 @@ namespace NovoRender.PDFReader
                         var height = lods[0][i].Height;
                         lods[Math.Max(0, lods.Count - 5)][i].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
                         var _name = $"Page {(i + 1).ToString(pageFormat)}";
-                        metadata.WriteLine($"{{\"id\":{i},\"path\":\"{_name}\",\"level\":0,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
+                        metadata.WriteLine($"{{\"id\":{i},\"path\":\"{_name}\",\"level\":0,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"],[\"Procore/Id\",\"{documentId}_{i}\"]]}}");
                     }
                 }
                 else
@@ -193,7 +242,7 @@ namespace NovoRender.PDFReader
                     // lods[Math.Max(0, lods.Count - 4)][0].Write(tmpFile, MagickFormat.Jpeg);
                     // var data = Convert.ToBase64String(System.IO.File.ReadAllBytes(tmpFile));
                     // var textUri = $"data:image/jpeg;base64,{data}";
-                    metadata.WriteLine($"{{\"id\":0,\"path\":\"\",\"level\":0,\"type\":1,\"name\":\"\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
+                    metadata.WriteLine($"{{\"id\":0,\"path\":\"\",\"level\":0,\"type\":1,\"name\":\"\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"],[\"Procore/Id\",\"{documentId}\"]]}}");
                 }
             }
 
@@ -413,6 +462,12 @@ namespace NovoRender.PDFReader
             }
             Directory.Delete(tmpDir.ToString());
         }
+
+        [GeneratedRegex(@"/ID\s*\[\s*<([0-9A-Fa-f]+)>")]
+        private static partial Regex HexStringIdRegex();
+
+        [GeneratedRegex(@"/ID\s*\[\s*\(([^)]*)\)")]
+        private static partial Regex LiteralStringIdRegex();
     }
 }
 
