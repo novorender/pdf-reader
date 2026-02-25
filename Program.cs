@@ -135,19 +135,47 @@ namespace NovoRender.PDFReader
         /// </summary>
         static string GetDocumentId(FileInfo file)
         {
-            // Read just the tail of the file - the trailer is always near the end
-            using var stream = file.OpenRead();
-            var tailLength = (int)Math.Min(stream.Length, 8192);
-            stream.Seek(-tailLength, SeekOrigin.End);
-            var buffer = new byte[tailLength];
-            stream.ReadExactly(buffer);
-            var tail = Encoding.Latin1.GetString(buffer);
+            const int initialWindow = 8192;
+            const int maxWindow = 1024 * 1024;
 
+            using var stream = file.OpenRead();
+            var length = stream.Length;
+            var windowSize = (int)Math.Min(length, initialWindow);
+
+            while (windowSize > 0)
+            {
+                stream.Seek(-windowSize, SeekOrigin.End);
+                var buffer = new byte[windowSize];
+                stream.ReadExactly(buffer);
+                var tail = Encoding.Latin1.GetString(buffer);
+
+                if (TryExtractId(tail, out var id))
+                {
+                    return id;
+                }
+
+                if (windowSize >= length || windowSize >= maxWindow)
+                {
+                    break;
+                }
+
+                windowSize = (int)Math.Min(Math.Min(windowSize * 2L, maxWindow), length);
+            }
+
+            // Fallback: SHA-256 of the entire file
+            stream.Seek(0, SeekOrigin.Begin);
+            var hash = SHA256.HashData(stream);
+            return Convert.ToHexStringLower(hash);
+        }
+
+        static bool TryExtractId(string tail, out string id)
+        {
             // Look for /ID [ <hex> ... ] or /ID [ (...) ... ]
             var match = HexStringIdRegex().Match(tail);
             if (match.Success)
             {
-                return WhitespaceRegex().Replace(match.Groups[1].Value, "").ToLowerInvariant();
+                id = WhitespaceRegex().Replace(match.Groups[1].Value, "").ToLowerInvariant();
+                return true;
             }
 
             match = LiteralStringIdRegex().Match(tail);
@@ -195,13 +223,12 @@ namespace NovoRender.PDFReader
                         bytes.Add((byte)raw[i]);
                     }
                 }
-                return Convert.ToHexStringLower(bytes.ToArray());
+                id = Convert.ToHexStringLower(bytes.ToArray());
+                return true;
             }
 
-            // Fallback: SHA-256 of the entire file
-            stream.Seek(0, SeekOrigin.Begin);
-            var hash = SHA256.HashData(stream);
-            return Convert.ToHexStringLower(hash);
+            id = null;
+            return false;
         }
 
         public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, uint tileSize, int epsg)
