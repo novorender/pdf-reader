@@ -123,6 +123,7 @@ namespace NovoRender.PDFReader
         public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, uint tileSize, int epsg)
         {
             var fileName = file.Name;
+            var documentId = PdfDocumentId.GetDocumentId(file);
 
             double currentDensity = initialDensity;
             var pageTresholdReached = new List<bool>();
@@ -181,7 +182,7 @@ namespace NovoRender.PDFReader
                         var height = lods[0][i].Height;
                         lods[Math.Max(0, lods.Count - 5)][i].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
                         var _name = $"Page {(i + 1).ToString(pageFormat)}";
-                        metadata.WriteLine($"{{\"id\":{i},\"path\":\"{_name}\",\"level\":0,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
+                        metadata.WriteLine($"{{\"id\":{i},\"path\":\"{_name}\",\"level\":0,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"],[\"Procore/Id\",\"{documentId}_{i}\"]]}}");
                     }
                 }
                 else
@@ -193,7 +194,7 @@ namespace NovoRender.PDFReader
                     // lods[Math.Max(0, lods.Count - 4)][0].Write(tmpFile, MagickFormat.Jpeg);
                     // var data = Convert.ToBase64String(System.IO.File.ReadAllBytes(tmpFile));
                     // var textUri = $"data:image/jpeg;base64,{data}";
-                    metadata.WriteLine($"{{\"id\":0,\"path\":\"\",\"level\":0,\"type\":1,\"name\":\"\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
+                    metadata.WriteLine($"{{\"id\":0,\"path\":\"\",\"level\":0,\"type\":1,\"name\":\"\",\"properties\":[[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"],[\"Procore/Id\",\"{documentId}\"]]}}");
                 }
             }
 
