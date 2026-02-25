@@ -147,7 +147,7 @@ namespace NovoRender.PDFReader
             var match = HexStringIdRegex().Match(tail);
             if (match.Success)
             {
-                return match.Groups[1].Value.ToLowerInvariant();
+                return WhitespaceRegex().Replace(match.Groups[1].Value, "").ToLowerInvariant();
             }
 
             match = LiteralStringIdRegex().Match(tail);
@@ -463,11 +463,14 @@ namespace NovoRender.PDFReader
             Directory.Delete(tmpDir.ToString());
         }
 
-        [GeneratedRegex(@"/ID\s*\[\s*<([0-9A-Fa-f]+)>")]
+        [GeneratedRegex(@"/ID\s*\[\s*<([0-9A-Fa-f\s]+)>")]
         private static partial Regex HexStringIdRegex();
 
         [GeneratedRegex(@"/ID\s*\[\s*\(([^)]*)\)")]
         private static partial Regex LiteralStringIdRegex();
+
+        [GeneratedRegex(@"\s+")]
+        private static partial Regex WhitespaceRegex();
     }
 }
 
