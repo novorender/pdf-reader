@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -36,7 +37,7 @@ public static partial class PdfDocumentId
 
             if (TryExtractId(tail, out var id))
             {
-                return id!;
+                return id;
             }
 
             if (windowSize >= length || windowSize >= maxWindow)
@@ -53,7 +54,7 @@ public static partial class PdfDocumentId
         return Convert.ToHexStringLower(hash);
     }
 
-    public static bool TryExtractId(string tail, out string? id)
+    public static bool TryExtractId(string tail, [NotNullWhen(true)] out string? id)
     {
         // Look for /ID [ <hex> ... ] or /ID [ (...) ... ]
         var match = HexStringIdRegex().Match(tail);

@@ -120,7 +120,6 @@ namespace NovoRender.PDFReader
             MagickNET.SetTempDirectory(tmpDir.ToString());
             tmpFile = tmpDir.ToString() + "\\tmp.png";
         }
-
         public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, uint tileSize, int epsg)
         {
             var fileName = file.Name;
@@ -415,7 +414,6 @@ namespace NovoRender.PDFReader
             }
             Directory.Delete(tmpDir.ToString());
         }
-
     }
 }
 
