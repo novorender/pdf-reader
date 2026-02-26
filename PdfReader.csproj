@@ -16,7 +16,7 @@
   <ItemGroup>
     <PackageReference Include="CommandLineArgumentsParser" Version="3.0.22" />
     <PackageReference Include="NovoRender.GLtf" Version="0.1.49" />
-    <PackageReference Include="Magick.NET-Q16-x64" Version="14.8.2" />
+    <PackageReference Include="Magick.NET-Q16-x64" Version="14.10.3" />
   </ItemGroup>
   <ItemGroup>
     <None Update="gsdll64.dll">
@@ -25,6 +25,6 @@
   </ItemGroup>
 
   <Target Name="CopyNativeDLLs" AfterTargets="Publish">
-    <Copy SourceFiles=".\bin\x64\$(Configuration)\$(TargetFramework)\win-x64\gsdll64.dll" DestinationFolder="$(PublishDir)" />
+    <Copy SourceFiles="$(OutputPath)\gsdll64.dll" DestinationFolder="$(PublishDir)" />
   </Target>
 </Project>
