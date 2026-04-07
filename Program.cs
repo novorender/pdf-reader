@@ -182,7 +182,7 @@ namespace NovoRender.PDFReader
                         var height = lods[0][i].Height;
                         lods[Math.Max(0, lods.Count - 5)][i].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
                         var _name = $"Page {(i + 1).ToString(pageFormat)}";
-                        metadata.WriteLine($"{{\"id\":{i},\"path\":\"{_name}_{i}\",\"level\":0,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Procore/Id\",\"{documentId}_{i}\"],[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
+                        metadata.WriteLine($"{{\"id\":{i},\"path\":\"{_name}\",\"level\":0,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Procore/Id\",\"{documentId}_{i}\"],[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
                     }
                 }
                 else
