@@ -15,7 +15,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CommandLineArgumentsParser" Version="3.0.22" />
-    <PackageReference Include="NovoRender.GLtf" Version="0.1.49" />
+    <PackageReference Include="NovoRender.GLtf" Version="0.1.59" />
     <PackageReference Include="Magick.NET-Q16-x64" Version="14.10.3" />
   </ItemGroup>
   <ItemGroup>
