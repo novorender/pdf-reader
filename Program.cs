@@ -114,11 +114,38 @@ namespace NovoRender.PDFReader
         string tmpFile;
         public PdfToImageConverter(FileInfo inputFile)
         {
-            tmpDir = new DirectoryInfo(inputFile.Directory.ToString() + "\\Tmp");
+            tmpDir = new DirectoryInfo(Path.Combine(inputFile.Directory.FullName, "Tmp"));
             //MagickNET.SetGhostscriptDirectory(filePath + "Lib");
-            Directory.CreateDirectory(tmpDir.ToString());
-            MagickNET.SetTempDirectory(tmpDir.ToString());
-            tmpFile = tmpDir.ToString() + "\\tmp.png";
+            Directory.CreateDirectory(tmpDir.FullName);
+            MagickNET.SetTempDirectory(tmpDir.FullName);
+            tmpFile = Path.Combine(tmpDir.FullName, "tmp.png");
+        }
+
+        /// <summary>
+        /// Builds the model-tree metadata rows (one JSON object per line) for a document.
+        /// Single-page => one leaf row (empty path; the consumer names it after the file).
+        /// Multi-page  => a container row (type 0, empty path) followed by one leaf per page
+        /// with numeric path "1".."n" and display name "Page N", so the downstream pipeline
+        /// produces file.pdf (container) + file.pdf/1..n (leaves).
+        /// </summary>
+        public static IEnumerable<string> BuildMetadataLines(
+            int numPages, string documentId, (uint width, uint height)[] sizes, string[] previews)
+        {
+            if (numPages > 1)
+            {
+                // File container node (no page image of its own); id placed after the pages to stay unique.
+                yield return $"{{\"id\":{numPages},\"path\":\"\",\"level\":0,\"type\":0,\"name\":\"\",\"properties\":[[\"Procore/Id\",\"{documentId}\"]]}}";
+                for (var i = 0; i < numPages; i++)
+                {
+                    // Numeric path (file.pdf/1..n) with a "Page N" display name.
+                    var name = $"Page {i + 1}";
+                    yield return $"{{\"id\":{i},\"path\":\"{i + 1}\",\"level\":1,\"type\":1,\"name\":\"{name}\",\"properties\":[[\"Procore/Id\",\"{documentId}_{i}\"],[\"Novorender/Document/Size\",\"{sizes[i].width},{sizes[i].height}\"],[\"Novorender/Document/Preview\",\"{previews[i]}\"]]}}";
+                }
+            }
+            else
+            {
+                yield return $"{{\"id\":0,\"path\":\"\",\"level\":0,\"type\":1,\"name\":\"\",\"properties\":[[\"Procore/Id\",\"{documentId}\"],[\"Novorender/Document/Size\",\"{sizes[0].width},{sizes[0].height}\"],[\"Novorender/Document/Preview\",\"{previews[0]}\"]]}}";
+            }
         }
         public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, uint tileSize, int epsg)
         {
@@ -170,31 +197,34 @@ namespace NovoRender.PDFReader
 
             string pageFormat = null;
 
+            // Write the per-page preview JPEGs and collect page sizes/preview names.
+            var baseName = Path.GetFileNameWithoutExtension(fileName);
+            var sizes = new (uint width, uint height)[numPages];
+            var previews = new string[numPages];
+            if (numPages > 1)
+            {
+                pageFormat = string.Concat(Enumerable.Repeat("0", (int)Math.Ceiling(Math.Log10(numPages + 1))));
+                for (var i = 0; i < numPages; i++)
+                {
+                    var preview = $"{baseName}_{(i + 1).ToString(pageFormat)}.jpeg";
+                    sizes[i] = (lods[0][i].Width, lods[0][i].Height);
+                    previews[i] = preview;
+                    lods[Math.Max(0, lods.Count - 5)][i].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
+                }
+            }
+            else
+            {
+                var preview = $"{baseName}.jpeg";
+                lods[Math.Max(0, lods.Count - 7)][0].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
+                sizes[0] = (lods[0][0].Width, lods[0][0].Height);
+                previews[0] = preview;
+            }
+
             using (var metadata = File.CreateText(Path.Combine(destinationPath, "metadata")))
             {
-                if (numPages > 1)
+                foreach (var line in BuildMetadataLines(numPages, documentId, sizes, previews))
                 {
-                    pageFormat = string.Concat(Enumerable.Repeat("0", (int)Math.Ceiling(Math.Log10(numPages + 1))));
-                    for (var i = 0; i < numPages; i++)
-                    {
-                        var preview = $"{Path.GetFileNameWithoutExtension(fileName)}_{(i + 1).ToString(pageFormat)}.jpeg";
-                        var width = lods[0][i].Width;
-                        var height = lods[0][i].Height;
-                        lods[Math.Max(0, lods.Count - 5)][i].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
-                        var _name = $"Page {(i + 1).ToString(pageFormat)}";
-                        metadata.WriteLine($"{{\"id\":{i},\"path\":\"{_name}\",\"level\":0,\"type\":1,\"name\":\"{_name}\",\"properties\":[[\"Procore/Id\",\"{documentId}_{i}\"],[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
-                    }
-                }
-                else
-                {
-                    var preview = $"{Path.GetFileNameWithoutExtension(fileName)}.jpeg";
-                    lods[Math.Max(0, lods.Count - 7)][0].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
-                    var width = lods[0][0].Width;
-                    var height = lods[0][0].Height;
-                    // lods[Math.Max(0, lods.Count - 4)][0].Write(tmpFile, MagickFormat.Jpeg);
-                    // var data = Convert.ToBase64String(System.IO.File.ReadAllBytes(tmpFile));
-                    // var textUri = $"data:image/jpeg;base64,{data}";
-                    metadata.WriteLine($"{{\"id\":0,\"path\":\"\",\"level\":0,\"type\":1,\"name\":\"\",\"properties\":[[\"Procore/Id\",\"{documentId}\"],[\"Novorender/Document/Size\",\"{width},{height}\"],[\"Novorender/Document/Preview\",\"{preview}\"]]}}");
+                    metadata.WriteLine(line);
                 }
             }
 
@@ -417,7 +447,3 @@ namespace NovoRender.PDFReader
         }
     }
 }
-
-
-
-
