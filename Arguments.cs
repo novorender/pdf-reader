@@ -44,5 +44,11 @@ namespace NovoRender.PDFReader
 
         [ValueArgument(typeof(double), "density", Optional = true, Example = "500", DefaultValue = 500, Description = "PDF density")]
         public double Density { get; set; }
+
+        [ValueArgument(typeof(bool), "no-tiles", Optional = true, Example = "true", DefaultValue = false, Description = "Skip tiling and export full page images")]
+        public bool NoTiles { get; set; }
+
+        [ValueArgument(typeof(string), "image-format", Optional = true, Example = "png", DefaultValue = "jpeg", Description = "Image format for no-tiles mode: png or jpeg")]
+        public string ImageFormat { get; set; }
     }
 }

@@ -81,7 +81,7 @@ namespace NovoRender.PDFReader
             // }
 
             PdfToImageConverter pdf = new PdfToImageConverter(arguments.File);
-            pdf.ConvertFileToImages(arguments.File, arguments.OutputFolder.FullName, arguments.Density, arguments.TileSize, GetEpsgCode(arguments.Epsg));
+            pdf.ConvertFileToImages(arguments.File, arguments.OutputFolder.FullName, arguments.Density, arguments.TileSize, GetEpsgCode(arguments.Epsg), arguments.NoTiles, arguments.ImageFormat);
             timer.Stop();
             Console.WriteLine($"Write complete in {timer.Elapsed}");
             return 0;
@@ -120,10 +120,37 @@ namespace NovoRender.PDFReader
             MagickNET.SetTempDirectory(tmpDir.ToString());
             tmpFile = tmpDir.ToString() + "\\tmp.png";
         }
-        public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, uint tileSize, int epsg)
+        public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, uint tileSize, int epsg, bool noTiles, string imageFormat)
         {
             var fileName = file.Name;
             var documentId = PdfDocumentId.GetDocumentId(file);
+            var outputImageFormat = ParseOutputImageFormat(imageFormat);
+
+            if (noTiles)
+            {
+                var noTileReadSettings = new MagickReadSettings
+                {
+                    Density = new Density(initialDensity, initialDensity)
+                };
+                using var fullPages = new MagickImageCollection();
+                fullPages.Read(file.ToString(), noTileReadSettings);
+
+                var noTilesPageFormat = fullPages.Count > 1
+                    ? string.Concat(Enumerable.Repeat("0", (int)Math.Ceiling(Math.Log10(fullPages.Count + 1))))
+                    : null;
+                var extension = outputImageFormat == MagickFormat.Png ? "png" : "jpeg";
+
+                for (var pageIdx = 0; pageIdx < fullPages.Count; pageIdx++)
+                {
+                    var magickImage = fullPages[pageIdx];
+                    magickImage.ColorAlpha(MagickColor.FromRgb(255, 255, 255));
+                    var pageSuffix = string.IsNullOrWhiteSpace(noTilesPageFormat) ? "" : $"_{(pageIdx + 1).ToString(noTilesPageFormat)}";
+                    var outFile = $"{Path.GetFileNameWithoutExtension(fileName)}{pageSuffix}.{extension}";
+                    magickImage.Write(Path.Combine(destinationPath, outFile), outputImageFormat);
+                }
+
+                return;
+            }
 
             double currentDensity = initialDensity;
             var pageTresholdReached = new List<bool>();
@@ -414,6 +441,23 @@ namespace NovoRender.PDFReader
                 File.Delete(tmpFile);
             }
             Directory.Delete(tmpDir.ToString());
+        }
+
+        private static MagickFormat ParseOutputImageFormat(string imageFormat)
+        {
+            if (string.IsNullOrWhiteSpace(imageFormat))
+            {
+                return MagickFormat.Jpeg;
+            }
+
+            var normalized = imageFormat.Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                "png" => MagickFormat.Png,
+                "jpeg" => MagickFormat.Jpeg,
+                "jpg" => MagickFormat.Jpeg,
+                _ => throw new ArgumentException($"Invalid image format: {imageFormat}. Supported values are png and jpeg.")
+            };
         }
     }
 }
