@@ -1,11 +1,13 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using GLtf = Novorender.GLtf;
 using ImageMagick;
+using PDFiumCore;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 
 namespace NovoRender.PDFReader
 {
@@ -69,16 +71,7 @@ namespace NovoRender.PDFReader
             var arguments = Arguments.Parse(args);
             if (arguments == null) return -1;
             arguments.OutputFolder.Create();
-            MagickNET.SetGhostscriptDirectory(Directory.GetCurrentDirectory());
             var timer = System.Diagnostics.Stopwatch.StartNew();
-            // Console.Write("Loading.");
-            //var settings = new CoordnateSettings();
-
-            // using (StreamReader r = new StreamReader(args[1]))
-            // {
-            //     string json = r.ReadToEnd();
-            //     settings = JsonConvert.DeserializeObject<CoordnateSettings>(json);
-            // }
 
             PdfToImageConverter pdf = new PdfToImageConverter(arguments.File);
             pdf.ConvertFileToImages(arguments.File, arguments.OutputFolder.FullName, arguments.Density, arguments.TileSize, GetEpsgCode(arguments.Epsg));
@@ -111,14 +104,29 @@ namespace NovoRender.PDFReader
     public class PdfToImageConverter
     {
         DirectoryInfo tmpDir;
-        string tmpFile;
+
+        static readonly object _pdfiumLock = new object();
+        static bool _pdfiumInitialized;
+
+        // PDFium's FPDF_InitLibrary must be called exactly once per process (and the matching
+        // FPDF_DestroyLibrary is intentionally not called per-conversion — that would break a
+        // second call; the library is torn down on process exit).
+        static void EnsurePdfiumInitialized()
+        {
+            if (_pdfiumInitialized) return;
+            lock (_pdfiumLock)
+            {
+                if (_pdfiumInitialized) return;
+                fpdfview.FPDF_InitLibrary();
+                _pdfiumInitialized = true;
+            }
+        }
+
         public PdfToImageConverter(FileInfo inputFile)
         {
             tmpDir = new DirectoryInfo(Path.Combine(inputFile.Directory.FullName, "Tmp"));
-            //MagickNET.SetGhostscriptDirectory(filePath + "Lib");
             Directory.CreateDirectory(tmpDir.FullName);
             MagickNET.SetTempDirectory(tmpDir.FullName);
-            tmpFile = Path.Combine(tmpDir.FullName, "tmp.png");
         }
 
         /// <summary>
@@ -147,76 +155,113 @@ namespace NovoRender.PDFReader
                 yield return $"{{\"id\":0,\"path\":\"\",\"level\":0,\"type\":1,\"name\":\"\",\"properties\":[[\"Procore/Id\",\"{documentId}\"],[\"Novorender/Document/Size\",\"{sizes[0].width},{sizes[0].height}\"],[\"Novorender/Document/Preview\",\"{previews[0]}\"]]}}";
             }
         }
+
         public void ConvertFileToImages(FileInfo file, string destinationPath, double initialDensity, uint tileSize, int epsg)
         {
             var fileName = file.Name;
+            var baseName = Path.GetFileNameWithoutExtension(fileName);
             var documentId = PdfDocumentId.GetDocumentId(file);
 
-            double currentDensity = initialDensity;
-            var pageTresholdReached = new List<bool>();
             int lodDepth = 1;
-            int filesWritten = 0;
-            MagickReadSettings magickReadSettings = new MagickReadSettings();
-            var lods = new List<MagickImageCollection>();
-            while (true)//currentDensity > 10)
+            var density = initialDensity;
+            // Embedded GLB textures are PNG (lossless), matching the previous Ghostscript pipeline.
+            var texFmt = MagickFormat.Png;
+            var texMime = "image/png";
+            var pdfBytes = File.ReadAllBytes(file.FullName);
+
+            EnsurePdfiumInitialized();
+            var pdfHandle = GCHandle.Alloc(pdfBytes, GCHandleType.Pinned);
+            var doc = fpdfview.FPDF_LoadMemDocument(pdfHandle.AddrOfPinnedObject(), pdfBytes.Length, null);
+            if (doc == null)
             {
-                bool tresholdReached = true;
-                magickReadSettings.Density = new Density(currentDensity, currentDensity);
-                var collection = new MagickImageCollection();
-                lods.Add(collection);
-                collection.Read(file.ToString(), magickReadSettings);
-                for (var pageIdx = 0; pageIdx < collection.Count; pageIdx++)
-                {
-                    var magickImage = collection[pageIdx];
-                    magickImage.ColorAlpha(MagickColor.FromRgb(255, 255, 255));
-                    if (pageIdx == pageTresholdReached.Count)
-                    {
-                        pageTresholdReached.Add(false);
-                    }
-                    if (pageTresholdReached[pageIdx])
-                    {
-                        continue;
-                    }
-                    if (magickImage.Height <= tileSize && magickImage.Width <= tileSize)
-                    {
-                        pageTresholdReached[pageIdx] = true;
-                        continue;
-                    }
-                    tresholdReached = false;
-                }
-                if (tresholdReached)
-                {
-                    break;
-                }
-                currentDensity = currentDensity / 2;
+                pdfHandle.Free();
+                throw new InvalidOperationException(
+                    $"PDFium failed to load '{file.FullName}' (corrupt or password-protected). Error code: {fpdfview.FPDF_GetLastError()}");
+            }
+            var numPages = fpdfview.FPDF_GetPageCount(doc);
+            var pages = new FpdfPageT[numPages];
+            var pagePtsW = new double[numPages];
+            var pagePtsH = new double[numPages];
+            for (int p = 0; p < numPages; p++)
+            {
+                pages[p] = fpdfview.FPDF_LoadPage(doc, p);
+                pagePtsW[p] = fpdfview.FPDF_GetPageWidthF(pages[p]);
+                pagePtsH[p] = fpdfview.FPDF_GetPageHeightF(pages[p]);
             }
 
-            var numPages = lods[0].Count;
+            // Native PDFium handles + the pinned GC handle are released in the finally below,
+            // so they don't leak if conversion throws.
+            try
+            {
+
+            // Pixel dimensions of a page at LOD k (density halves each level).
+            int Dim(double pts, double d) => (int)Math.Round(pts * d / 72.0);
+            uint LevelW(int p, int k) => (uint)Dim(pagePtsW[p], density / Math.Pow(2, k));
+            uint LevelH(int p, int k) => (uint)Dim(pagePtsH[p], density / Math.Pow(2, k));
+
+            // Render a region of a page (the page scaled to sizeX x sizeY, offset by start)
+            // into a contiguous outW x outH BGRA byte buffer, composited over white (the
+            // bitmap is filled opaque white before rendering). PDFium is single-threaded, so
+            // every render call must happen serially.
+            byte[] RenderRegionRaw(FpdfPageT page, int startX, int startY, int sizeX, int sizeY, uint outW, uint outH)
+            {
+                var bmp = fpdfview.FPDFBitmapCreate((int)outW, (int)outH, 1);
+                fpdfview.FPDFBitmapFillRect(bmp, 0, 0, (int)outW, (int)outH, 0xFFFFFFFFUL);
+                fpdfview.FPDF_RenderPageBitmap(bmp, page, startX, startY, sizeX, sizeY, 0, 0);
+                int stride = fpdfview.FPDFBitmapGetStride(bmp);
+                IntPtr buf = fpdfview.FPDFBitmapGetBuffer(bmp);
+                var bytes = new byte[(int)outW * 4 * (int)outH];
+                for (int row = 0; row < outH; row++)
+                    Marshal.Copy(buf + row * stride, bytes, row * (int)outW * 4, (int)outW * 4);
+                fpdfview.FPDFBitmapDestroy(bmp);
+                return bytes;
+            }
+
+            // MagickImage variant (used for the preview/thumbnail renders).
+            MagickImage RenderRegion(FpdfPageT page, int startX, int startY, int sizeX, int sizeY, uint outW, uint outH)
+            {
+                var img = new MagickImage();
+                img.ReadPixels(RenderRegionRaw(page, startX, startY, sizeX, sizeY, outW, outH),
+                    new PixelReadSettings(outW, outH, StorageType.Char, PixelMapping.BGRA));
+                img.ColorAlpha(MagickColor.FromRgb(255, 255, 255));
+                return img;
+            }
+
+            // Number of LOD levels: keep halving density until the largest page fits a tile.
+            uint maxDim = 0;
+            for (int p = 0; p < numPages; p++)
+                maxDim = Math.Max(maxDim, Math.Max(LevelW(p, 0), LevelH(p, 0)));
+            int levelCount = maxDim <= tileSize ? 1 : (int)Math.Ceiling(Math.Log2((double)maxDim / tileSize)) + 1;
+
             var zeroPages = Enumerable.Repeat(((byte[])null, (string)null, -1), numPages).ToArray();
             var numPageLods = (int)Math.Ceiling(Math.Log(numPages, 8));
 
             string pageFormat = null;
 
-            // Write the per-page preview JPEGs and collect page sizes/preview names.
-            var baseName = Path.GetFileNameWithoutExtension(fileName);
+            // Write the per-page preview JPEGs and collect page sizes/preview names, then emit the
+            // model-tree metadata via BuildMetadataLines (container row + leaves for multi-page).
             var sizes = new (uint width, uint height)[numPages];
             var previews = new string[numPages];
             if (numPages > 1)
             {
                 pageFormat = string.Concat(Enumerable.Repeat("0", (int)Math.Ceiling(Math.Log10(numPages + 1))));
+                int previewLevel = Math.Max(0, levelCount - 5);
                 for (var i = 0; i < numPages; i++)
                 {
                     var preview = $"{baseName}_{(i + 1).ToString(pageFormat)}.jpeg";
-                    sizes[i] = (lods[0][i].Width, lods[0][i].Height);
+                    sizes[i] = (LevelW(i, 0), LevelH(i, 0));
                     previews[i] = preview;
-                    lods[Math.Max(0, lods.Count - 5)][i].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
+                    using var pv = RenderRegion(pages[i], 0, 0, (int)LevelW(i, previewLevel), (int)LevelH(i, previewLevel), LevelW(i, previewLevel), LevelH(i, previewLevel));
+                    pv.Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
                 }
             }
             else
             {
                 var preview = $"{baseName}.jpeg";
-                lods[Math.Max(0, lods.Count - 7)][0].Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
-                sizes[0] = (lods[0][0].Width, lods[0][0].Height);
+                int previewLevel = Math.Max(0, levelCount - 7);
+                using var pv = RenderRegion(pages[0], 0, 0, (int)LevelW(0, previewLevel), (int)LevelH(0, previewLevel), LevelW(0, previewLevel), LevelH(0, previewLevel));
+                pv.Write(Path.Combine(destinationPath, preview), MagickFormat.Jpeg);
+                sizes[0] = (LevelW(0, 0), LevelH(0, 0));
                 previews[0] = preview;
             }
 
@@ -230,115 +275,135 @@ namespace NovoRender.PDFReader
 
             var normal = new Vector3(0, 0, 1);
 
-            foreach (var magickImageCollection in lods)
+            for (int k = 0; k < levelCount; k++)
             {
-                int pageIdx = 0;
-                foreach (MagickImage magickImage in magickImageCollection)
+                bool isCoarsestLod = lodDepth == levelCount;
+                int idBits = levelCount - lodDepth;
+                for (int pageIdx = 0; pageIdx < numPages; pageIdx++)
                 {
+                    var page = pages[pageIdx];
+                    uint Wk = LevelW(pageIdx, k);
+                    uint Hk = LevelH(pageIdx, k);
                     var pagePrefix = "";
                     if (numPages > 1)
                     {
                         var pi = pageIdx;
-                        for (var i = 0; i < numPageLods; i++)
+                        for (var b = 0; b < numPageLods; b++)
                         {
                             pagePrefix = $"{(pi % 8)}{pagePrefix}";
                             pi /= 8;
                         }
                     }
-                    var pixels = magickImage.GetPixels();
-                    var maxSize = (double)Math.Max(magickImage.Width, magickImage.Height);
-                    var noIteration = (int)Math.Pow(2, Math.Ceiling(Math.Log2(Math.Ceiling(maxSize / (double)tileSize))));
-                    var wsD = (double)tileSize / (double)magickImage.Height;
-                    for (uint i = 0; i < noIteration; ++i)
+                    int nx = (int)((Wk + tileSize - 1) / tileSize);
+                    int ny = (int)((Hk + tileSize - 1) / tileSize);
+                    var wsD = (double)tileSize / (double)Hk;
+                    var prefix = pagePrefix;
+                    var pageId = pageIdx;
+
+                    // Pipeline the serial PDFium render with the parallel tile encode: one
+                    // producer thread renders strips (PDFium must stay serial / single-thread)
+                    // into a small bounded queue, while the consumer encodes the previous
+                    // strip's tiles in parallel. This keeps the cores busy during the
+                    // otherwise-idle render, and still bounds memory to ~2 strips.
+                    var bandQueue = new System.Collections.Concurrent.BlockingCollection<(int jj, byte[] bgra, uint bandH)>(2);
+                    var renderTask = Task.Run(() =>
                     {
-                        uint x = i * tileSize;
-                        if (x >= magickImage.Width) break;
-                        uint endWidth = x + tileSize;
-                        uint dx = endWidth > magickImage.Width ? magickImage.Width - x : tileSize;
-                        for (uint j = 0; j < noIteration; ++j)
+                        try
                         {
-                            uint y = j * tileSize;
-                            if (y >= magickImage.Height) break;
-                            var id = new string(Enumerable.Range(0, lods.Count - lodDepth).Select(k => (char)('0' + ((i & (1 << k)) != 0 ? 1 : 0) | ((j & (1 << k)) != 0 ? 2 : 0))).Reverse().ToArray());
-                            var glbFilename = $"{destinationPath}/_{pagePrefix}{id}";
-                            using (var builder = new GLtf.Builder(glbFilename))
+                            for (int j = 0; j < ny; j++)
                             {
-                                Console.WriteLine(glbFilename);
-
-                                uint endHeight = y + tileSize;
-                                uint dy = endHeight > magickImage.Height ? magickImage.Height - y : tileSize;
-                                var pixelArea = pixels.GetArea((int)x, (int)y, dx, dy);
-                                var tiledImage = new MagickImage();
-                                var settings = new PixelReadSettings(dx, dy, StorageType.Quantum, PixelMapping.RGB);
-                                tiledImage.ReadPixels(pixelArea.AsSpan(), settings);
-                                if (dx != tileSize || dy != tileSize)
-                                {
-                                    var mg = new MagickGeometry(tileSize) { IgnoreAspectRatio = true };
-                                    tiledImage.Resize(mg);
-                                }
-                                tiledImage.Write(Path.Combine(destinationPath, $"{Path.GetFileNameWithoutExtension(fileName)}"
-                                    + (string.IsNullOrWhiteSpace(pageFormat) ? "" : $"_{(pageIdx + 1).ToString(pageFormat)}")
-                                    + $"_{id}.jpeg"));
-                                tiledImage.Format = MagickFormat.Png;
-                                tiledImage.Write(tmpFile);
-
-                                var imgBlob = System.IO.File.ReadAllBytes(tmpFile);
-                                if (lods.Count == lodDepth) zeroPages[pageIdx] = (imgBlob, pagePrefix, pageIdx);
-                                var (bufferBegin, bufferEnd) = builder.Buffer.AddRange(imgBlob);
-                                var imageBufferView = builder.AddBufferView(0, imgBlob.Length, bufferBegin);
-                                var imgIdx = builder.AddImage("image/png", imageBufferView);
-                                var baseTexture = builder.AddTexture(imgIdx, null);
-
-                                var material = builder.AddUnlitMaterial(rgba: new Speckle.DoubleNumerics.Vector4(1, 1, 1, 1), alphaMode: GLtf.AlphaMode.BLEND, baseColorTexture: builder.CreateTextureInfo(baseTexture), doubleSided: true);
-
-                                using (var vertexBuffer = new VertexBufferBuilderPT(builder))
-                                {
-                                    var _dx = (float)dx / (float)tileSize;
-                                    var _dy = (float)dy / (float)tileSize;
-                                    var width = (float)(wsD * _dx);
-                                    var height = (float)(wsD * _dy);
-                                    var localCornerX = i * wsD;
-                                    var localCornerY = 1 - j * wsD - height;
-                                    var z = pageIdx * -0.0001f;
-                                    Vector3 a = new Vector3((float)localCornerX, (float)localCornerY, z);
-                                    Vector3 b = new Vector3((float)localCornerX + width, (float)localCornerY, z);
-                                    Vector3 c = new Vector3((float)localCornerX + width, (float)localCornerY + height, z);
-                                    Vector3 d = new Vector3((float)localCornerX, (float)localCornerY + height, z);
-                                    vertexBuffer.Add(a, normal, new Vector2(0, 1));
-                                    vertexBuffer.Add(b, normal, new Vector2(1, 1));
-                                    vertexBuffer.Add(c, normal, new Vector2(1, 0));
-
-                                    vertexBuffer.Add(a, normal, new Vector2(0, 1));
-                                    vertexBuffer.Add(c, normal, new Vector2(1, 0));
-                                    vertexBuffer.Add(d, normal, new Vector2(0, 0));
-
-                                    var (positionAccessor, normalAccessor, uvAccessor) = vertexBuffer.Finish();
-                                    var attributes = new[]
-                                    {
-                                            builder.CreateAttribute("POSITION", positionAccessor),
-                                            builder.CreateAttribute("NORMAL", normalAccessor),
-                                            builder.CreateAttribute("TEXCOORD_0", uvAccessor),
-                                        };
-                                    var primitive = builder.CreatePrimitive(attributes, mode: GLtf.DrawMode.TRIANGLES, material: material);
-                                    var meshIdx = builder.AddMesh(new[] { primitive });
-                                    var nodeIdx = builder.AddNode(name: pageIdx.ToString(), mesh: meshIdx);
-                                    builder.AddScene(nodes: new[] { nodeIdx });
-                                    builder.Write(true);
-                                    ++filesWritten;
-                                }
+                                uint bandY = (uint)j * tileSize;
+                                uint bh = bandY + tileSize > Hk ? Hk - bandY : tileSize;
+                                bandQueue.Add((j, RenderRegionRaw(page, 0, -(int)bandY, (int)Wk, (int)Hk, Wk, bh), bh));
                             }
                         }
+                        finally { bandQueue.CompleteAdding(); }
+                    });
 
-                        if (magickImage.Height <= tileSize && magickImage.Width <= tileSize)
+                    foreach (var (jj, bandBgra, bandH) in bandQueue.GetConsumingEnumerable())
+                    {
+                        int bandStride = (int)Wk * 4;
+
+                        Parallel.For(0, nx, ii =>
                         {
-                            pageTresholdReached[pageIdx] = true;
-                        }
+                            uint i = (uint)ii;
+                            uint x = i * tileSize;
+                            uint dx = x + tileSize > Wk ? Wk - x : tileSize;
+                            uint dy = bandH;
+                            var id = new string(Enumerable.Range(0, idBits).Select(bit => (char)('0' + ((i & (1 << bit)) != 0 ? 1 : 0) | (((uint)jj & (1 << bit)) != 0 ? 2 : 0))).Reverse().ToArray());
+                            var glbFilename = $"{destinationPath}/_{prefix}{id}";
+                            using var builder = new GLtf.Builder(glbFilename);
+                            using var tiledImage = new MagickImage();
+                            // Copy this tile's region out of the shared BGRA strip. Reads of a
+                            // plain byte[] are thread-safe, so no lock is needed; each tile owns
+                            // its own buffer + MagickImage.
+                            int rowBytes = (int)dx * 4;
+                            var tileBgra = new byte[rowBytes * (int)dy];
+                            for (int row = 0; row < dy; row++)
+                                Array.Copy(bandBgra, row * bandStride + (int)x * 4, tileBgra, row * rowBytes, rowBytes);
+                            tiledImage.ReadPixels(tileBgra, new PixelReadSettings(dx, dy, StorageType.Char, PixelMapping.BGRA));
+                            tiledImage.ColorAlpha(MagickColor.FromRgb(255, 255, 255));
+                            if (dx != tileSize || dy != tileSize)
+                            {
+                                var mg = new MagickGeometry(tileSize) { IgnoreAspectRatio = true };
+                                tiledImage.Resize(mg);
+                            }
+                            tiledImage.Write(Path.Combine(destinationPath, $"{baseName}"
+                                + (string.IsNullOrWhiteSpace(pageFormat) ? "" : $"_{(pageId + 1).ToString(pageFormat)}")
+                                + $"_{id}.jpeg"));
+
+                            var imgBlob = tiledImage.ToByteArray(texFmt);
+                            // The coarsest LOD is a single tile per page; retain it for the
+                            // page-group GLBs assembled after this loop.
+                            if (isCoarsestLod) zeroPages[pageId] = (imgBlob, prefix, pageId);
+                            var (bufferBegin, _) = builder.Buffer.AddRange(imgBlob);
+                            var imageBufferView = builder.AddBufferView(0, imgBlob.Length, bufferBegin);
+                            var imgIdx = builder.AddImage(texMime, imageBufferView);
+                            var baseTexture = builder.AddTexture(imgIdx, null);
+
+                            var material = builder.AddUnlitMaterial(rgba: new Speckle.DoubleNumerics.Vector4(1, 1, 1, 1), alphaMode: GLtf.AlphaMode.BLEND, baseColorTexture: builder.CreateTextureInfo(baseTexture), doubleSided: true);
+
+                            using (var vertexBuffer = new VertexBufferBuilderPT(builder))
+                            {
+                                var _dx = (float)dx / (float)tileSize;
+                                var _dy = (float)dy / (float)tileSize;
+                                var width = (float)(wsD * _dx);
+                                var height = (float)(wsD * _dy);
+                                var localCornerX = i * wsD;
+                                var localCornerY = 1 - jj * wsD - height;
+                                var z = pageId * -0.0001f;
+                                Vector3 a = new Vector3((float)localCornerX, (float)localCornerY, z);
+                                Vector3 b = new Vector3((float)localCornerX + width, (float)localCornerY, z);
+                                Vector3 c = new Vector3((float)localCornerX + width, (float)localCornerY + height, z);
+                                Vector3 d = new Vector3((float)localCornerX, (float)localCornerY + height, z);
+                                vertexBuffer.Add(a, normal, new Vector2(0, 1));
+                                vertexBuffer.Add(b, normal, new Vector2(1, 1));
+                                vertexBuffer.Add(c, normal, new Vector2(1, 0));
+
+                                vertexBuffer.Add(a, normal, new Vector2(0, 1));
+                                vertexBuffer.Add(c, normal, new Vector2(1, 0));
+                                vertexBuffer.Add(d, normal, new Vector2(0, 0));
+
+                                var (positionAccessor, normalAccessor, uvAccessor) = vertexBuffer.Finish();
+                                var attributes = new[]
+                                {
+                                    builder.CreateAttribute("POSITION", positionAccessor),
+                                    builder.CreateAttribute("NORMAL", normalAccessor),
+                                    builder.CreateAttribute("TEXCOORD_0", uvAccessor),
+                                };
+                                var primitive = builder.CreatePrimitive(attributes, mode: GLtf.DrawMode.TRIANGLES, material: material);
+                                var meshIdx = builder.AddMesh(new[] { primitive });
+                                var nodeIdx = builder.AddNode(name: pageId.ToString(), mesh: meshIdx);
+                                builder.AddScene(nodes: new[] { nodeIdx });
+                                builder.Write(true);
+                            }
+                        });
                     }
-                    ++pageIdx;
+                    renderTask.Wait();
                 }
                 ++lodDepth;
             }
-            var _aspect = (double)lods[0][0].Width / (double)lods[0][0].Height;
+            var _aspect = (double)LevelW(0, 0) / (double)LevelH(0, 0);
             void save(string id, (byte[] blob, string prefix, int id)[] pages)
             {
                 var glbFilename = $"{destinationPath}/{id}";
@@ -371,7 +436,7 @@ namespace NovoRender.PDFReader
                     {
                         var (bufferBegin, bufferEnd) = builder.Buffer.AddRange(page.blob);
                         var imageBufferView = builder.AddBufferView(0, page.blob.Length, bufferBegin);
-                        var imgIdx = builder.AddImage("image/png", imageBufferView);
+                        var imgIdx = builder.AddImage(texMime, imageBufferView);
                         var baseTexture = builder.AddTexture(imgIdx, null);
 
                         var material = builder.AddUnlitMaterial(rgba: new Speckle.DoubleNumerics.Vector4(1, 1, 1, 1), alphaMode: GLtf.AlphaMode.BLEND, baseColorTexture: builder.CreateTextureInfo(baseTexture), doubleSided: true);
@@ -393,13 +458,13 @@ namespace NovoRender.PDFReader
                 save("_", zeroPages);
             }
             {
-                var image = lods[Math.Max(0, lods.Count - 5)][0];
+                int al = Math.Max(0, levelCount - 5);
+                using var image = RenderRegion(pages[0], 0, 0, (int)LevelW(0, al), (int)LevelH(0, al), LevelW(0, al), LevelH(0, al));
                 var x = (uint)Math.Min(2048, Math.Pow(2, Math.Log2(image.Width)));
                 var y = (uint)Math.Min(2048, Math.Pow(2, Math.Log2(image.Height)));
                 var mg = new MagickGeometry(x, y) { IgnoreAspectRatio = true };
                 image.Resize(mg);
-                image.Write(tmpFile, MagickFormat.Png);
-                save("asset", new[] { (System.IO.File.ReadAllBytes(tmpFile), "", 0) });
+                save("asset", new[] { (image.ToByteArray(texFmt), "", 0) });
             }
             File.WriteAllText(destinationPath + "/asset.json", System.Text.Json.JsonSerializer.Serialize(new
             {
@@ -438,12 +503,29 @@ namespace NovoRender.PDFReader
                 },
                 parsers = new[] { new[] { "pdf_reader", "1.0" } }
             }));
-            string[] tmpFiles = Directory.GetFiles(tmpDir.ToString());
-            foreach (var tmpFile in tmpFiles)
-            {
-                File.Delete(tmpFile);
+
             }
-            Directory.Delete(tmpDir.ToString());
+            finally
+            {
+                for (int p = 0; p < numPages; p++) fpdfview.FPDF_ClosePage(pages[p]);
+                fpdfview.FPDF_CloseDocument(doc);
+                pdfHandle.Free();
+            }
+
+            // Cleanup temporary files
+            try
+            {
+                string[] tmpFiles = Directory.GetFiles(tmpDir.FullName);
+                foreach (var tempFilePath in tmpFiles)
+                {
+                    File.Delete(tempFilePath);
+                }
+                Directory.Delete(tmpDir.FullName);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: Failed to cleanup temp directory: {ex.Message}");
+            }
         }
     }
 }
