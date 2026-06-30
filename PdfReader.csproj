@@ -17,14 +17,6 @@
     <PackageReference Include="CommandLineArgumentsParser" Version="3.0.23" />
     <PackageReference Include="NovoRender.GLtf" Version="0.1.59" />
     <PackageReference Include="Magick.NET-Q16-AnyCPU" Version="14.14.0" />
+    <PackageReference Include="PDFiumCore" Version="151.0.7891" />
   </ItemGroup>
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
-    <None Update="gsdll64.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-
-  <Target Name="CopyNativeDLLs" AfterTargets="Publish" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
-    <Copy SourceFiles="$(OutputPath)\gsdll64.dll" DestinationFolder="$(PublishDir)" />
-  </Target>
 </Project>
